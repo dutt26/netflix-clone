@@ -107,9 +107,9 @@ jobs:
         run: |
           stylelint "**/*.css" || true
 
-       - name: Lint JavaScript
-         run: |
-           eslint login.js register.js script.js session.js --no-error-on-unmatched-pattern
+      - name: Lint JavaScript
+        run: |
+          eslint login.js register.js script.js session.js --no-error-on-unmatched-pattern
 
       - name: Upload Website Artifact
         uses: actions/upload-artifact@v4
