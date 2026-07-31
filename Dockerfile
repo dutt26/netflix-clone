@@ -1,5 +1,12 @@
-FROM ubuntu
-RUN apt update
-RUN apt install apache2 -y
-COPY * /var/www/html/
-CMD ["/usr/sbin/apachectl", "-D", "FOREGROUND"]
+FROM ubuntu:24.04
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends apache2 && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY . /var/www/html/
+
+EXPOSE 80
+
+CMD ["/usr/sbin/apache2ctl", "-D", "FOREGROUND"]
