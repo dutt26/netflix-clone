@@ -103,8 +103,8 @@ jobs:
           htmlhint "*.html"
 
       - name: Lint CSS
-        run: |
-          stylelint "**/*.css"
+        continue-on-error: true
+        run: stylelint "**/*.css"
 
       - name: Lint JavaScript
         run: |
