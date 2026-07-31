@@ -102,9 +102,10 @@ jobs:
         run: |
           htmlhint "*.html"
 
-      - name: Validate CSS Files
+      - name: Lint CSS
+        continue-on-error: true
         run: |
-          find . -name "*.css" -exec echo "Checking {}" \;
+          stylelint "**/*.css" || true
 
       - name: Lint JavaScript
         run: |
