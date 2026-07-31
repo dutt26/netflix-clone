@@ -19,5 +19,5 @@ jobs:
         run: docker build -t netflix:v1 .
 
       - name: tag image
-        run: docker tag netflix:v1 rahamshaik/gabimage
+        run: docker tag netflix:v1 yashwanthdutt26/gabimage
 
