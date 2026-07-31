@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/dutt26/self-healing-app.git
+    repoURL: https://github.com/dutt26/netflix-clone.git
     targetRevision: HEAD
     path: apps/backend
   destination:
