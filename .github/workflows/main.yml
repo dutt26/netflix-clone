@@ -1,4 +1,4 @@
-name: Enterprise Java CI Pipeline
+name: Enterprise Static Website CI Pipeline
 
 on:
   push:
@@ -29,7 +29,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  JAVA_VERSION: "17"
+  NODE_VERSION: "22"
   IMAGE_NAME: dutt26/netflix
   IMAGE_TAG: ${{ github.sha }}
   REPO: netfliximage
@@ -37,80 +37,88 @@ env:
 jobs:
 
   build:
-    name: Build Spring Boot Application
+    name: Validate Static Website
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
-    defaults:
-      run:
-        shell: bash
-
     steps:
-      # Checkout Source
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # Setup Java
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
-          cache: maven
+          node-version: ${{ env.NODE_VERSION }}
 
-      # Display Versions
       - name: Display Versions
         run: |
-          java -version
-          mvn -version
+          node --version
+          npm --version
 
-      # Restore Maven Cache
-      - name: Restore Maven Cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
+      - name: Install Validation Tools
+        run: |
+          npm install -g htmlhint stylelint stylelint-config-standard eslint
 
-      # Download Dependencies
-      - name: Download Dependencies
-        run: mvn dependency:go-offline
+      - name: Create HTMLHint Configuration
+        run: |
+          cat <<EOF > .htmlhintrc
+          {
+            "tagname-lowercase": true,
+            "attr-lowercase": true,
+            "attr-value-double-quotes": false,
+            "doctype-first": false,
+            "tag-pair": true,
+            "id-unique": true
+          }
+          EOF
 
-      # Verify Dependency Tree
-      - name: Verify Dependencies
-        run: mvn dependency:tree
+      - name: Create Stylelint Configuration
+        run: |
+          cat <<EOF > .stylelintrc.json
+          {
+            "extends": "stylelint-config-standard"
+          }
+          EOF
 
-      # Unit Tests
-      - name: Run Unit Tests
-        run: mvn clean test
+      - name: Create ESLint Configuration
+        run: |
+          cat <<EOF > eslint.config.js
+          export default [
+            {
+              files: ["**/*.js"],
+              languageOptions: {
+                ecmaVersion: "latest",
+                sourceType: "script"
+              },
+              rules: {
+                "no-unused-vars": "warn",
+                "no-undef": "off"
+              }
+            }
+          ];
+          EOF
 
-      # Publish Test Report
-      - name: Publish JUnit Test Report
-        if: always()
-        uses: mikepenz/action-junit-report@v5
-        with:
-          report_paths: target/surefire-reports/*.xml
-          fail_on_failure: true
+      - name: Validate HTML
+        run: |
+          htmlhint "*.html"
 
-      # Upload Test Reports
-      - name: Upload Test Reports
-        if: always()
+      - name: Lint CSS
+        run: |
+          stylelint "**/*.css"
+
+      - name: Lint JavaScript
+        run: |
+          eslint *.js
+
+      - name: Upload Website Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: junit-test-report
-          path: target/surefire-reports/
-
-      # Build Application
-      - name: Build Spring Boot Application
-        run: mvn clean package -DskipTests
-
-      # Upload JAR Artifact
-      - name: Upload Build Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: springboot-artifact
-          path: target/*.jar
+          name: website-files
+          path: |
+            *.html
+            *.css
+            *.js
+            assets/**
 
   security:
     name: Security & Docker Validation
@@ -123,28 +131,24 @@ jobs:
       security-events: write
 
     steps:
-      # Checkout Repository
+
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # Download JAR
-      - name: Download Build Artifact
+      - name: Download Website Artifact
         uses: actions/download-artifact@v4
         with:
-          name: springboot-artifact
-          path: target
+          name: website-files
+          path: .
 
-      # Gitleaks Secret Scan
       - name: Run Gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Install Trivy
       - name: Install Trivy
         uses: aquasecurity/setup-trivy@v0.2.2
 
-      # Trivy Filesystem Scan
       - name: Run Trivy Filesystem Scan
         run: |
           trivy fs \
@@ -154,25 +158,21 @@ jobs:
             --exit-code 1 \
             .
 
-      # Upload SARIF Report
-      - name: Upload Trivy SARIF Report
+      - name: Upload Trivy SARIF
         if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-fs.sarif
 
-      # Dockerfile Lint
       - name: Lint Dockerfile
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: Dockerfile
           failure-threshold: warning
 
-      # Setup Buildx
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Docker Cache
       - name: Restore Docker Cache
         uses: actions/cache@v4
         with:
@@ -181,7 +181,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
 
-      # Build Docker Image
       - name: Build Docker Image
         uses: docker/build-push-action@v6
         with:
@@ -204,26 +203,22 @@ jobs:
             org.opencontainers.image.version=${{ github.sha }}
             org.opencontainers.image.revision=${{ github.sha }}
 
-      # Update Docker Cache
       - name: Update Docker Cache
         run: |
           rm -rf /tmp/.buildx-cache
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
-      # Verify Image
       - name: Verify Docker Image
         run: |
           docker images
           docker image inspect ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
-      # Docker Login
       - name: Login to DockerHub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # Push Image
       - name: Push Docker Image
         run: |
           docker tag \
@@ -233,20 +228,18 @@ jobs:
           docker push \
             ${{ secrets.DOCKER_USER }}/${{ env.REPO }}:${{ env.IMAGE_TAG }}
 
-      # Smoke Test
       - name: Smoke Test Container
         run: |
           docker run -d \
             --name netflix-test \
-            -p 8080:8080 \
+            -p 8080:80 \
             ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
-          sleep 30
+          sleep 15
 
           docker ps
           docker logs netflix-test
 
-      # Cleanup
       - name: Cleanup
         if: always()
         run: |
