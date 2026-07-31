@@ -1,0 +1,8 @@
+title = "Custom Gitleaks Configuration"
+
+[allowlist]
+description = "Allow TMDB demo API key"
+
+regexes = [
+  '''https://api\.themoviedb\.org/3/.*api_key=.*'''
+]
